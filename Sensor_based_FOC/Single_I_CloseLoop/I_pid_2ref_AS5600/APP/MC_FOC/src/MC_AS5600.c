@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file MC_AS5600.c
  * @brief AS5600 magnetic encoder driver and rotor angle alignment/estimation for FOC.
  * @author reisen_fil (reisen_oxj@qq.com)
@@ -11,28 +11,34 @@
 
 #include "MC_AS5600.h"
 
+
 /**
- * @brief Reads the raw 12-bit mechanical angle from the AS5600 sensor via I2C and reverses the direction.
- * @return uint16_t The reversed 12-bit raw angle value (0-4095).
- * @date 2026-06-02
- */
-uint16_t AS5600_GetAngle()
+  * @brief  Read the raw 12-bit mechanical angle from the AS5600 sensor through I2C
+  * @param  encoder_pHandle: Pointer to the encoder parameter structure used to store the read result
+  * @retval uint8_t  I2C communication status (0: success, non-zero: failure)
+  * @date 2026-06-19
+  */
+uint8_t AS5600_GetAngle(ENCODER_PARAM_T *encoder_pHandle)
 {
     uint8_t AS5600_data[2];
 
-    // TIM2->CNT = 0;
-    
-    drv_SoftI2C_ReadTwoBytes(AS5600_I2C_ADDR, AS5600_REG_ANGLE_H, AS5600_data);    
+    // TIM2->CNT = 0;    
+    // Directly get the return value from the low-level I2C read function
+    uint8_t i2c_status = drv_SoftI2C_ReadTwoBytes(AS5600_I2C_ADDR, AS5600_REG_ANGLE_H,AS5600_data);
 
-    // AS5600_Get_cnt = TIM2->CNT;
-    
-    // 12-bit data: lower 4 bits of high byte + 8 bits of low byte
-    // According to AS5600 datasheet: only lower 4 bits of high byte are valid
-    uint16_t angle = ((AS5600_data[0] & 0x0F) << 8) | AS5600_data[1];
+    // AS5600_Get_cnt = TIM2->CNT; 
 
-    /* Set angle acquisition direction (reverse) */  
-    return 4095 - angle;      
+    if (!i2c_status) // Read successful
+    {
+        // Combine into a 12-bit angle: lower 4 bits of the high byte + 8 bits of the low byte
+        uint16_t angle = ((AS5600_data[0] & 0x0F) << 8) | AS5600_data[1];
+        // Reverse the direction and directly store it into the passed structure member
+        encoder_pHandle->rawEncoder = 4095 - angle;
+    }
+
+    return i2c_status; // Return the I2C read status for upper-layer judgment
 }
+
 
 /* Parameter initialization */
 
@@ -47,6 +53,8 @@ void EncoderAlign_Init(ENCODER_PARAM_T *encoder_pHandle)
     encoder_pHandle->MechanicalAngle_Norm = _IQ(0.0f);
     encoder_pHandle->Norm_speed = _IQ(0.0f);
     encoder_pHandle->rawEncoder = 0;
+    encoder_pHandle->acc_rawEncoder = 0;          
+    encoder_pHandle->calib_rawEncoder = 0;           
     encoder_pHandle->nowEncoder = 0;
     encoder_pHandle->lastEncoder = 0;
     encoder_pHandle->isCalibrated = 0;
@@ -67,7 +75,7 @@ void EncoderAlign_Init(ENCODER_PARAM_T *encoder_pHandle)
  */
 void EncoderAlign_Calibrate(ENCODER_PARAM_T *encoder_pHandle, MC_FOC_SYSTEM_T *foc_phandle)
 {
-    static uint32_t encoderSum;
+    // static uint32_t encoderSum;
     
     // State 1: Apply d-axis current and wait for rotor to stabilize
     if(encoder_pHandle->alignState == 0)
@@ -83,28 +91,49 @@ void EncoderAlign_Calibrate(ENCODER_PARAM_T *encoder_pHandle, MC_FOC_SYSTEM_T *f
     }
 
     // State 2: Sample encoder value 10 times and calculate the average
-    if(encoder_pHandle->alignState == 1)
+    if(encoder_pHandle->alignState == 1) 
     {
-        if(encoder_pHandle->encoder_state_cnt < 10)
-        { 
-            encoderSum += AS5600_GetAngle();  // Read raw encoder value
-            encoder_pHandle->encoder_state_cnt++;
+        if(encoder_pHandle->encoder_state_cnt < 10) 
+        {
+            // First determine whether the AS5600 read was successful
+            if (!AS5600_GetAngle(encoder_pHandle)) 
+            {
+                // Read successful: accumulate the angle value stored in the structure into acc_rawEncoder
+                encoder_pHandle->acc_rawEncoder += encoder_pHandle->rawEncoder;
+                encoder_pHandle->encoder_state_cnt++;
+            }
+            else 
+            {
+                FOC_Ctrl(_IQ(0.0f), _IQ(0.0f), foc_phandle);
+
+                // Read failed: clear the counter and alignment status flag, then trigger a system fault
+                encoder_pHandle->encoder_state_cnt = 0;
+                encoder_pHandle->alignState = 0;
+                encoder_pHandle->acc_rawEncoder = 0; // Clear the accumulator for later use                
+                
+                encoder_pHandle->calib_error_cnt++;
+                if(encoder_pHandle->calib_error_cnt <= 3) 
+                {                      
+                    foc_phandle->state_machine.current_state = FOC_STATE_FAULT;  /* Detection becomes invalid if the signal line contact becomes unstable or disconnects midway during I2C bus detection */
+                }
+                else foc_phandle->state_machine.current_state = FOC_STATE_STOP;
+            }
         }
         else 
         {
-            // Calculate average encoder value
-            encoder_pHandle->rawEncoder = encoderSum / encoder_pHandle->encoder_state_cnt;
-
+            // Accumulation complete; calculate the average and enter the next stage
+            encoder_pHandle->calib_rawEncoder = encoder_pHandle->acc_rawEncoder / encoder_pHandle->encoder_state_cnt;
+            encoder_pHandle->calib_error_cnt = 0;
             encoder_pHandle->encoder_state_cnt = 0;
             encoder_pHandle->alignState = 2;
-            encoderSum = 0;            
+            encoder_pHandle->acc_rawEncoder = 0; // Clear the accumulator for later use
         }
-    }
+    }    
     
     // State 3: Calculate normalized zero-offset
     if(encoder_pHandle->alignState == 2)
     {
-        encoder_pHandle->lastEncoder = encoder_pHandle->rawEncoder;
+        encoder_pHandle->lastEncoder = encoder_pHandle->calib_rawEncoder;
         encoder_pHandle->Norm_speed = _IQ(0.0f);
         
         // Stop current output
@@ -127,7 +156,7 @@ void EncoderAlign_Calibrate(ENCODER_PARAM_T *encoder_pHandle, MC_FOC_SYSTEM_T *f
  * @param  encoder_pHandle Pointer to the encoder parameter structure.
  * @date 2026-06-02
  */
-void EncoderAlign_UpdateAngle(ENCODER_PARAM_T *encoder_pHandle)
+void EncoderAlign_UpdateAngle(ENCODER_PARAM_T *encoder_pHandle,MC_FOC_SYSTEM_T *foc_phandle)
 {
     _iq mechAngleRaw;      // Raw mechanical angle (Q15)
     _iq mechAngleNorm;     // Normalized mechanical angle (Q15, 0.0-1.0)
@@ -142,33 +171,36 @@ void EncoderAlign_UpdateAngle(ENCODER_PARAM_T *encoder_pHandle)
     }
 
     // Read real-time mechanical angle from encoder
-    encoder_pHandle->nowEncoder = AS5600_GetAngle();  
-    
-    // Step 1: Calculate raw mechanical angle (considering zero-offset)
-    // Handle encoder wrap-around (0-4095 cycle)
-    if(encoder_pHandle->nowEncoder >= encoder_pHandle->rawEncoder)
+    if(!AS5600_GetAngle(encoder_pHandle)) 
     {
-        mechAngleRaw = encoder_pHandle->nowEncoder - encoder_pHandle->rawEncoder;
+        encoder_pHandle->nowEncoder = encoder_pHandle->rawEncoder;
+        
+        // Step 1: Calculate raw mechanical angle (considering zero-offset)
+        // Handle encoder wrap-around (0-4095 cycle)
+        if(encoder_pHandle->nowEncoder >= encoder_pHandle->calib_rawEncoder)
+        {
+            mechAngleRaw = encoder_pHandle->nowEncoder - encoder_pHandle->calib_rawEncoder;
+        }
+        else
+        {
+            // Handle wrap-around: encoder jumps from 4095 to 0
+            mechAngleRaw = encoder_pHandle->nowEncoder + ENCODER_RESOLUTION - encoder_pHandle->calib_rawEncoder;
+        }
+        
+        // Step 2: Normalize mechanical angle to 0.0-1.0 range
+        mechAngleNorm = _IQdiv(_IQ(mechAngleRaw), _IQ(ENCODER_RESOLUTION));
+        encoder_pHandle->MechanicalAngle_Norm = mechAngleNorm;
+        
+        // Step 3: Calculate electrical angle = mechanical angle * pole pairs
+        elecAngleRaw = _IQmpy(mechAngleNorm, _IQ(MOTOR_POLE_PAIRS));
+        
+        // Step 4: Normalize electrical angle to 0.0-1.0 range (extract fractional part)
+        // Since there are 7 pole pairs, electrical angle can be 0-7, need fmod(x, 1.0)
+        elecAngleNorm = _IQfrac(elecAngleRaw);  // Extract fractional part -> normalized
+        
+        encoder_pHandle->ElectricalAngle_Norm = elecAngleNorm;        
     }
-    else
-    {
-        // Handle wrap-around: encoder jumps from 4095 to 0
-        mechAngleRaw = encoder_pHandle->nowEncoder + ENCODER_RESOLUTION - encoder_pHandle->rawEncoder;
-    }
-    
-    // Step 2: Normalize mechanical angle to 0.0-1.0 range
-    mechAngleNorm = _IQdiv(_IQ(mechAngleRaw), _IQ(ENCODER_RESOLUTION));
-    encoder_pHandle->MechanicalAngle_Norm = mechAngleNorm;
-    
-    // Step 3: Calculate electrical angle = mechanical angle * pole pairs
-    elecAngleRaw = _IQmpy(mechAngleNorm, _IQ(MOTOR_POLE_PAIRS));
-    
-    // Step 4: Normalize electrical angle to 0.0-1.0 range (extract fractional part)
-    // Since there are 7 pole pairs, electrical angle can be 0-7, need fmod(x, 1.0)
-    elecAngleNorm = _IQfrac(elecAngleRaw);  // Extract fractional part -> normalized
-    
-    
-    encoder_pHandle->ElectricalAngle_Norm = elecAngleNorm;
+    else foc_phandle->state_machine.current_state = FOC_STATE_STOP;
 }
 
 /**

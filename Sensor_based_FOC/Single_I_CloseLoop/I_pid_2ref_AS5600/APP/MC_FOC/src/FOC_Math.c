@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file FOC_Math.c
  * @brief Mathematical operations for Field Oriented Control (FOC) and signal processing.
  * @author reisen_fil (reisen_oxj@qq.com)
@@ -298,6 +298,7 @@ void MC_PI_Calculate(MC_PI_CONTROLLER_T *PI_Control, _iq target)
  * @param handle Pointer to the LPF1 handle structure.
  * @param Ts     Sampling period (seconds).
  * @param Fc     Cutoff frequency (Hz).
+ * @date 2026-06-02
  */
 void MC_LPF1_Init(MC_LPF1_T *handle, _iq Ts, _iq Fc)
 {
@@ -318,6 +319,7 @@ void MC_LPF1_Init(MC_LPF1_T *handle, _iq Ts, _iq Fc)
  * @param handle Pointer to the LPF1 handle structure.
  * @param input  Current input value.
  * @return _iq   Filtered output value.
+ * @date 2026-06-19
  */
 _iq MC_LPF1_Run(MC_LPF1_T *handle, _iq input)
 {
@@ -379,7 +381,7 @@ void rfft(complex *v, int n, complex *tmp)
 _iq GetFreqMagnitude(complex *fft_result, int target_freq)
 {   
     /* 1. Calculate FFT index for the target frequency (rounded) */
-    int index = (int)(_IQtoF(_IQ(target_freq/FFT_FREQ_RES)) + 0.5f);
+    int index = (int)(_IQtoF(_IQ(target_freq/FFT_FREQ_RES)) + 2.0f);
     
     /* 2. Calculate magnitude: |X(k)| = sqrt(Re^2 + Im^2) / N * 2 (for real signals) */
     _iq Mag = _IQmpy(_IQdiv(_IQsqrt(_IQmpy(fft_result[index].Re, fft_result[index].Re) + _IQmpy(fft_result[index].Im, fft_result[index].Im)), _IQ(FFT_N)), _IQ(2.0));

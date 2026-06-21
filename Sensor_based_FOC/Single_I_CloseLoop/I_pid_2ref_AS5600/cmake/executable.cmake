@@ -34,36 +34,72 @@ add_custom_command(
   COMMENT "Generating .hex file ...")
 
 # Erase and Flash Program
+set(OPENOCD_EXE "$ENV{OPENOCD_RISCV}/bin/openocd.exe")
+set(OPENOCD_CFG "$ENV{OPENOCD_RISCV}/bin/wch-riscv.cfg")
+set(HEX_FILE "${CMAKE_BINARY_DIR}/lib_obj/${PROJECT_NAME}.hex")
+
+# set(CMD_ERASE   "-c init -c halt -c \"flash erase_sector 0 last\" -c exit")
+# set(CMD_PROGRAM "-c init -c halt -c \"program \\\"${HEX_FILE}\\\" verify\" -c exit")
+# set(CMD_RESET   "-c init -c halt -c wlink_reset_resume -c exit")
+
+# add_custom_command(OUTPUT erase_sector   COMMAND ${OPENOCD_EXE} -f ${OPENOCD_CFG} ${CMD_ERASE})
+# add_custom_command(OUTPUT program_image  COMMAND ${OPENOCD_EXE} -f ${OPENOCD_CFG} ${CMD_PROGRAM})
+# add_custom_command(OUTPUT wlink_resume   COMMAND ${OPENOCD_EXE} -f ${OPENOCD_CFG} ${CMD_RESET})
+
+# add_custom_target(flash DEPENDS erase_sector program_image wlink_resume) 
+
+# Generate .bat for only programmer
 add_custom_command(
-  OUTPUT erase_sector
-  COMMAND
-    # ${CMAKE_SOURCE_DIR}/OpenOCD/bin/openocd -f ${CMAKE_SOURCE_DIR}/OpenOCD/bin/wch-riscv.cfg -c
-    # init -c halt -c "flash erase_sector wch_riscv 0 last " -c exit)
+    TARGET ${PROJECT_NAME}
+    POST_BUILD
+    # 调用 CMake 的脚本模式 (-P) 来执行文件写入
+    COMMAND ${CMAKE_COMMAND} 
+        -DOPENOCD_EXE="${OPENOCD_EXE}" 
+        -DOPENOCD_CFG="${OPENOCD_CFG}"
+        -DHEX_FILE="${HEX_FILE}"   
+        -DBUILD_DIR="${CMAKE_BINARY_DIR}" 
+        -P "${CMAKE_SOURCE_DIR}/cmake/generate_flash.cmake"
+    COMMENT "Generating flash.bat script after build..."
+)
 
-    $ENV{OPENOCD_RISCV}/bin/openocd -f $ENV{OPENOCD_RISCV}/bin/wch-riscv.cfg -c
-    init -c halt -c "flash erase_sector wch_riscv 0 last " -c exit)    
 
-add_custom_command(
-  OUTPUT program_image
-  COMMAND
-    # ${CMAKE_SOURCE_DIR}/OpenOCD/bin/openocd -f ${CMAKE_SOURCE_DIR}/OpenOCD/bin/wch-riscv.cfg -c
-    # init -c halt -c "program ${CMAKE_BINARY_DIR}/lib_obj/${PROJECT_NAME}.hex " -c
-    # "verify_image ${CMAKE_BINARY_DIR}/lib_obj/${PROJECT_NAME}.hex " -c exit)
+# add_custom_target(flash_only
+#     COMMAND "${CMAKE_BINARY_DIR}/flash.bat"
+#     DEPENDS "${CMAKE_BINARY_DIR}/flash.bat" ${PROJECT_NAME}
+#     WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+#     COMMENT "Flashing ${PROJECT_NAME} via OpenOCD..."
+# )
 
-    $ENV{OPENOCD_RISCV}/bin/openocd -f $ENV{OPENOCD_RISCV}/bin/wch-riscv.cfg -c
-    init -c halt -c "program ${CMAKE_BINARY_DIR}/lib_obj/${PROJECT_NAME}.hex " -c
-    "verify_image ${CMAKE_BINARY_DIR}/lib_obj/${PROJECT_NAME}.hex " -c exit)    
+# add_custom_command(
+#   OUTPUT erase_sector
+#   COMMAND
+#     # ${CMAKE_SOURCE_DIR}/OpenOCD/bin/openocd -f ${CMAKE_SOURCE_DIR}/OpenOCD/bin/wch-riscv.cfg -c
+#     # init -c halt -c "flash erase_sector wch_riscv 0 last " -c exit)
 
-# use wch-link reset MCU
-add_custom_command(
-  OUTPUT wlink_resume
-  COMMAND
-    # ${CMAKE_SOURCE_DIR}/OpenOCD/bin/openocd -f ${CMAKE_SOURCE_DIR}/OpenOCD/bin/wch-riscv.cfg -c
-    # init -c halt -c wlink_reset_resume -c exit)    
-    $ENV{OPENOCD_RISCV}/bin/openocd -f $ENV{OPENOCD_RISCV}/bin/wch-riscv.cfg -c
-    init -c halt -c wlink_reset_resume -c exit)     
+#     $ENV{OPENOCD_RISCV}/bin/openocd -f $ENV{OPENOCD_RISCV}/bin/wch-riscv.cfg -c
+#     init -c halt -c "flash erase_sector wch_riscv 0 last " -c exit)    
 
-add_custom_target(flash DEPENDS erase_sector program_image wlink_resume) 
+# add_custom_command(
+#   OUTPUT program_image
+#   COMMAND
+#     # ${CMAKE_SOURCE_DIR}/OpenOCD/bin/openocd -f ${CMAKE_SOURCE_DIR}/OpenOCD/bin/wch-riscv.cfg -c
+#     # init -c halt -c "program ${CMAKE_BINARY_DIR}/lib_obj/${PROJECT_NAME}.hex " -c
+#     # "verify_image ${CMAKE_BINARY_DIR}/lib_obj/${PROJECT_NAME}.hex " -c exit)
+
+#     $ENV{OPENOCD_RISCV}/bin/openocd -f $ENV{OPENOCD_RISCV}/bin/wch-riscv.cfg -c
+#     init -c halt -c "program ${CMAKE_BINARY_DIR}/lib_obj/${PROJECT_NAME}.hex " -c
+#     "verify_image ${CMAKE_BINARY_DIR}/lib_obj/${PROJECT_NAME}.hex " -c exit)    
+
+# # use wch-link reset MCU
+# add_custom_command(
+#   OUTPUT wlink_resume
+#   COMMAND
+#     # ${CMAKE_SOURCE_DIR}/OpenOCD/bin/openocd -f ${CMAKE_SOURCE_DIR}/OpenOCD/bin/wch-riscv.cfg -c
+#     # init -c halt -c wlink_reset_resume -c exit)    
+#     $ENV{OPENOCD_RISCV}/bin/openocd -f $ENV{OPENOCD_RISCV}/bin/wch-riscv.cfg -c
+#     init -c halt -c wlink_reset_resume -c exit)     
+
+# add_custom_target(flash DEPENDS erase_sector program_image wlink_resume) 
 
 message("")
 message("Project: ${PROJECT_NAME}")

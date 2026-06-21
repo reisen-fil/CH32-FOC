@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file drv_tim.c
  * @brief Timer driver implementation for center-aligned complementary PWM generation and system time-base counting.
  * @author reisen_fil (reisen_oxj@qq.com)
@@ -15,6 +15,7 @@
  * @brief Configures the advanced-control timer (TIM1) for center-aligned complementary PWM generation with dead-time insertion.
  * @param  TIM           Pointer to the timer peripheral base address (e.g., TIM1).
  * @param  PWM_Dead_Time The dead-time value to be inserted between complementary outputs (in timer clock cycles).
+ * @date 2026-06-19
  */
 static void drv_TIM1_CenterPWM_init(TIM_TypeDef *TIM, uint16_t PWM_Dead_Time)
 {   
@@ -90,16 +91,17 @@ static void drv_TIM1_CenterPWM_init(TIM_TypeDef *TIM, uint16_t PWM_Dead_Time)
 
 /**
  * @brief Configures TIM2 as a basic time-base counter running at 2kHz for general system timing or debugging.
+ * @date 2026-06-19
  */
 static void drv_TIM2_Count_Init(void)
 {
     TIM_TimeBaseInitTypeDef  TIM_TimeBaseStructure;
     uint16_t PrescalerValue;
 
-    PrescalerValue = 144 - 1;  
+    PrescalerValue = 72 - 1;  
 
     /* Time base configuration */
-    TIM_TimeBaseStructure.TIM_Period        = 10000 - 1;           
+    TIM_TimeBaseStructure.TIM_Period        = 5000 - 1;           
     TIM_TimeBaseStructure.TIM_Prescaler     = PrescalerValue;
     TIM_TimeBaseStructure.TIM_ClockDivision = TIM_CKD_DIV1;  
     TIM_TimeBaseStructure.TIM_CounterMode   = TIM_CounterMode_Up;  
@@ -123,6 +125,11 @@ static void drv_TIM2_Count_Init(void)
     TIM_Cmd(TIM2, ENABLE);
 }
 
+/**
+ * @brief Gets the TIM2 counter value and clears the counter.
+ * @return int16_t Signed TIM2 counter value before clearing.
+ * @date 2026-06-02
+ */
 int16_t Get_TIM2_Counter(void)
 {
     int16_t Counter = TIM2->CNT;
@@ -132,9 +139,10 @@ int16_t Get_TIM2_Counter(void)
 
 /**
  * @brief Top-level initialization function for the timer subsystem, configuring the main PWM timer and the auxiliary counter.
+ * @date 2026-06-19
  */
 void Drv_TIM_Init(void)
 {
-    drv_TIM1_CenterPWM_init(TIM1, 50);    /* Freq: 12kHz, Dead time: approx. 50ns PWM */
+    drv_TIM1_CenterPWM_init(TIM1, 50);    /* Freq: 6kHz, Dead time: approx. 50ns PWM */
     drv_TIM2_Count_Init();
 }

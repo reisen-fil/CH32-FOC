@@ -16,7 +16,7 @@
 #include "IQmath_RV32.h"
 
 /* Debug and test variables */
-extern uint8_t test_cnt, I_Ctrl_cnt;
+extern uint8_t test_cnt, I_Ctrl_cnt, AS5600_Detect_cnt;
 extern uint32_t FOC_Ctrl_cnt;
 extern uint16_t AS5600_Get_cnt;
 extern _iq Target_iq_test, Target_Sp_test;
@@ -135,17 +135,27 @@ extern uint8_t Get_KeyNum, main_to_isr;
 typedef enum {
     FOC_STATE_IDLE=1,                 /* Idle state */
     FOC_STATE_VOLTAGE_CHECK,          /* Check DC bus voltage */
-    FOC_STATE_CALIB,                  /* Calibration: Get OPA bias + AS5600 alignment */
-    // FOC_STATE_OPEN_LOOP,            /* Open-loop run - initial startup acceleration */
-    FOC_STATE_CLOSED_LOOP,            /* Closed-loop FOC control */
+    FOC_STATE_CURRENT_CALIB,           /* Current sensor offset calibration */
+    FOC_STATE_ENCODER_CALIB,                  /* Calibration: Get OPA bias + AS5600 alignment */
     FOC_STATE_STALL_DETECT,           /* Stall detection and protection */
     FOC_STATE_FAULT,                  /* Fault state */
-    FOC_STATE_STOP                    /* Stop state (waiting for start command) */
+    FOC_STATE_STOP,                    /* Stop state (waiting for start command) */
+    FOC_STATE_STANDBY,                 /* Standby state before closed-loop control */
+    FOC_STATE_CLOSED_LOOP,            /* Closed-loop FOC control */
+    FOC_STATE_PARAM_MEASURE            /* Motor parameter measurement state */
+
 } FOC_STATE_E;
+
+typedef enum {
+    DEVICE_IDLE = 1,                  /* Host control idle mode */
+	FOC_SPEED_CTRL_MODE,             /* Host current closed-loop control mode */
+    PARAM_IDENTIFY_MODE               /* Host parameter identification mode */
+} VOFA_CTRLSTATE_E;
 
 /**************************** FOC_System_State ******************************/
 typedef struct {
     FOC_STATE_E current_state;        /* Current state of the FOC state machine */
+    VOFA_CTRLSTATE_E vofa_ctrlfoc_state; /* Current VOFA host control mode */    
     // FOC_STATE_E next_state;          
     
     uint16_t startup_timer;           /* Timer for startup/calibration delays */
@@ -265,10 +275,13 @@ typedef struct
     _iq ElectricalAngle_Norm;         /* Normalized electrical angle (0.0 - 1.0) */
     _iq MechanicalAngle_Norm;         /* Normalized mechanical angle (0.0 - 1.0) */
     uint16_t encoder_state_cnt;       /* Encoder state counter (used during zero alignment) */
+    uint16_t calib_error_cnt;         /* Encoder calibration error counter */
+    uint16_t acc_rawEncoder;          /* Encoder zero-point offset (bias from alignment) */
+    uint16_t calib_rawEncoder;        /* Encoder zero-point offset (bias from alignment) */ 
     uint16_t rawEncoder;              /* Encoder zero-point offset (bias from alignment) */
     uint16_t nowEncoder;              /* Current raw encoder reading */
     uint16_t lastEncoder;             /* Previous raw encoder reading */
-    _iq Norm_speed_min;               /* Normalized mechanical speed (RPM) */    
+    _iq Norm_speed;                   /* Normalized mechanical speed (RPM) */    
     uint8_t isCalibrated;             /* Calibration completion flag */
     uint8_t alignState;               /* Alignment state machine flag (zero alignment) */
 	uint8_t motorDir;			      /* Motor operating direction */
@@ -281,16 +294,16 @@ extern ENCODER_PARAM_T mc_encoder_handle;
 
 /* DSP rFFT Configuration */
 #define FFT_N                               128              /* 128-point FFT */
-#define FFT_Fs                              12000            /* Sampling frequency: 12kHz */
+#define FFT_Fs                              6000            /* Sampling frequency: 12kHz */
 #define FFT_FREQ_RES                        (FFT_Fs/FFT_N)   /* Frequency resolution = 93.75Hz */
 
-#define FFT_inject_Freq                     1000.0           /* Frequency of the injected high-frequency signal for parameter identification */
+#define FFT_inject_Freq                     500.0           /* Frequency of the injected high-frequency signal for parameter identification */
 
 /*************************** PMSM_Identify_State *******************************/
 typedef enum {
     PARAM_IDLE,                                 /* Idle state */
     PARAM_MEASURE_R_1,                          /* Measure stator resistance */
-    PARAM_MEASURE_R_2,              
+    // PARAM_MEASURE_R_2,              
     PARAM_MEASURE_Ld,                           /* Measure inductance (Ld/Lq) */
 	PARAM_MEASURE_Lq,               
     PARAM_MEASURE_PSI,                          /* Measure permanent magnet flux linkage */

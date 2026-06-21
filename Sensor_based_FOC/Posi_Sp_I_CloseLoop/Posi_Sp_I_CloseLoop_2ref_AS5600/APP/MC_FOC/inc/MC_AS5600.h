@@ -3,11 +3,11 @@
 
 #include "headfile.h"
 
-uint16_t AS5600_GetAngle();
+uint8_t AS5600_GetAngle(ENCODER_PARAM_T *encoder_pHandle); 
 
 void EncoderAlign_Init(ENCODER_PARAM_T *encoder_pHandle);
 void EncoderAlign_Calibrate(ENCODER_PARAM_T *encoder_pHandle,MC_FOC_SYSTEM_T *foc_phandle);
-void EncoderAlign_UpdateAngle(ENCODER_PARAM_T *encoder_pHandle);
+void EncoderAlign_UpdateAngle(ENCODER_PARAM_T *encoder_pHandle,MC_FOC_SYSTEM_T *foc_phandle);
 void EncoderAlign_UpdateSpeed(ENCODER_PARAM_T *encoder_pHandle,uint16_t dt_us);
 
 _iq EncoderAlign_GetElectricalAngle(ENCODER_PARAM_T *encoder_pHandle);

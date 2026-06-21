@@ -11,7 +11,7 @@
 *.lnp   
 *.map
 *.sct
-*.dep
+*.de
 
 # cmake
 build

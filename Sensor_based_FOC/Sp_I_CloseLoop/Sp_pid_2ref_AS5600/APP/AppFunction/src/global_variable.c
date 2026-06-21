@@ -13,7 +13,7 @@
 
 /* Debug and test variables */
 uint32_t FOC_Ctrl_cnt;       /* Execution time counter for FOC control loop */
-uint8_t test_cnt,I_Ctrl_cnt;            /* General purpose test counter */
+uint8_t test_cnt,I_Ctrl_cnt,AS5600_Detect_cnt;            /* General purpose test counter */
 uint16_t AS5600_Get_cnt;     /* Execution time counter for AS5600 angle reading */
 _iq Target_iq_test,Target_Sp_test;          /* Target q-axis current for testing and tuning */
 

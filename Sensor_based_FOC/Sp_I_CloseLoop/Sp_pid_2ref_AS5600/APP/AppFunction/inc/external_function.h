@@ -19,7 +19,9 @@ _iq PotentiometerCtrl_Update(POTENTIOMETER_CTRL_T *pHandle,MC_FOC_SYSTEM_T *foc_
 
 void External_Function_Init(void);
 
+void UART_RX_Handle(MC_FOC_SYSTEM_T *foc_phandle,PARAM_IDENTIFY_T *PMSM_phandle,uint8_t *rx_buffer);
+
 int uart_printf(const char *fmt, ...);
-float string_to_float(char *str);
+
 
 #endif  

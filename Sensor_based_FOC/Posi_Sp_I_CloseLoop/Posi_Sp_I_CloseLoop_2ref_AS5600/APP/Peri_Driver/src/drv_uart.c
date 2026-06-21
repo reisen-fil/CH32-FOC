@@ -25,6 +25,7 @@ static void usart3_cb_put_frame(USART_CIRCULAR_BUFFER_T *cb, uint16_t start_offs
  * @param   usart_phandle - Pointer to the USART DMA system handle.
  *
  * @return  None
+ * @date 2026-06-19
  */
 static void drv_USART_DMA_init(USART_TypeDef *USART, uint32_t baudrate, USART_DMA_SYSTEM_T *usart_phandle)
 {
@@ -55,7 +56,7 @@ static void drv_USART_DMA_init(USART_TypeDef *USART, uint32_t baudrate, USART_DM
     DMA_InitStructure.DMA_DIR = DMA_DIR_PeripheralDST;      /* Memory to Peripheral */
     DMA_InitStructure.DMA_BufferSize = 0;           /* Dynamically set during transmission */
     DMA_InitStructure.DMA_Mode = DMA_Mode_Normal;
-    DMA_InitStructure.DMA_Priority = DMA_Priority_High;    
+    DMA_InitStructure.DMA_Priority = DMA_Priority_Medium;    
     DMA_Init(DMA1_Channel2, &DMA_InitStructure);
 
     DMA_Cmd(DMA1_Channel3, ENABLE);     /* Enable DMA1 Channel3 for continuous reception */
@@ -101,6 +102,7 @@ static void drv_USART_DMA_init(USART_TypeDef *USART, uint32_t baudrate, USART_DM
 
 /**
  * @brief Top-level initialization function for the USART subsystem, configuring USART3 with DMA and a specific baud rate.
+ * @date 2026-06-19
  */
 void Drv_USART_Init(void)
 {
@@ -111,6 +113,7 @@ void Drv_USART_Init(void)
  * @brief Transmits data via DMA in polling mode, blocking until the transfer is complete.
  * @param buf Pointer to the data buffer to be transmitted.
  * @param len Number of bytes to transmit.
+ * @date 2026-06-19
  */
 void USART_DMA_Send(uint8_t *buf, uint16_t len)
 {
@@ -147,6 +150,7 @@ void USART_DMA_Send(uint8_t *buf, uint16_t len)
 /**
  * @brief Handles the USART IDLE interrupt by calculating the received frame length, handling circular buffer wrap-around, and storing the frame metadata.
  * @param usart_phandle Pointer to the USART DMA system handle.
+ * @date 2026-06-19
  */
 void usart3_dma_handle(USART_DMA_SYSTEM_T *usart_phandle)
 {
@@ -184,6 +188,7 @@ void usart3_dma_handle(USART_DMA_SYSTEM_T *usart_phandle)
 
 /**
  * @brief Interrupt Service Routine (ISR) for USART3, triggered by the IDLE line to process incoming DMA data frames.
+ * @date 2026-06-19
  */
 void USART3_IRQHandler(void)
 {
@@ -199,6 +204,7 @@ void USART3_IRQHandler(void)
  * @brief Initializes the circular buffer control block.
  * @param cb Pointer to the circular buffer control block.
  * @details Clears the frame count, read index, and write index to prepare for receiving new data.
+ * @date 2026-06-19
  */
 static void usart3_cb_init(USART_CIRCULAR_BUFFER_T *cb)
 {
@@ -213,6 +219,7 @@ static void usart3_cb_init(USART_CIRCULAR_BUFFER_T *cb)
  * @param start_offset The starting offset of the data in the DMA buffer.
  * @param length The length of the data frame.
  * @details Stores the frame metadata (offset and length) into the circular buffer, automatically handling overflow by overwriting old frames.
+ * @date 2026-06-19
  */
 static void usart3_cb_put_frame(USART_CIRCULAR_BUFFER_T *cb, uint16_t start_offset, uint16_t length)
 {
@@ -233,6 +240,7 @@ static void usart3_cb_put_frame(USART_CIRCULAR_BUFFER_T *cb, uint16_t start_offs
  * @retval 1 Successfully retrieved a frame.
  * @retval 0 No data frame available.
  * @details Automatically handles DMA buffer wrap-around and copies the data into the user buffer.
+ * @date 2026-06-19
  */
 int USART3_GetFrame(USART_DMA_SYSTEM_T *usart_phandle)
 {

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file drv_adc.c
  * @brief ADC and OPAMP driver implementation for motor current and voltage sensing.
  * @author reisen_fil (reisen_oxj@qq.com)
@@ -13,6 +13,7 @@
 
 /**
  * @brief Initializes the internal Operational Amplifiers (OPAMP) and configures their associated GPIO pins for analog signal conditioning.
+ * @date 2026-06-19
  */
 static void drv_ADC_OPAMP_init(void)
 {
@@ -61,6 +62,7 @@ static void drv_ADC_OPAMP_init(void)
  * @brief Configures the ADC regular channels for continuous conversion and sets up DMA to transfer the data to a memory buffer.
  * @param  ADC    Pointer to the ADC peripheral base address (e.g., ADC1).
  * @param  buffer Pointer to the destination memory buffer for storing ADC conversion results.
+ * @date 2026-06-19
  */
 static void drv_ADCtoDMA_Regular_init(ADC_TypeDef *ADC, uint32_t *buffer)
 {
@@ -124,6 +126,7 @@ static void drv_ADCtoDMA_Regular_init(ADC_TypeDef *ADC, uint32_t *buffer)
 /**
  * @brief Configures the ADC injected channels for hardware-triggered conversion (via Timer TRGO) and enables the corresponding interrupt.
  * @param  ADC Pointer to the ADC peripheral base address (e.g., ADC2).
+ * @date 2026-06-19
  */
 static void drv_ADC_Inject_init(ADC_TypeDef *ADC)      
 {
@@ -172,6 +175,7 @@ static void drv_ADC_Inject_init(ADC_TypeDef *ADC)
 
 /**
  * @brief Top-level initialization function for the ADC subsystem, sequentially initializing the OPAMP, regular channels (with DMA), and injected channels.
+ * @date 2026-06-19
  */
 void Drv_ADC_Init(void)
 {

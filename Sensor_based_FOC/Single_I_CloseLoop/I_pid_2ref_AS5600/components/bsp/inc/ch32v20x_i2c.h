@@ -164,7 +164,7 @@ typedef struct
   *  and checking on EVT5) use I2C_SendData() function send the header of 10-bit addressing mode.  
   *  Then master wait EVT9. EVT9 means that the 10-bit addressing header has been correctly sent 
   *  on the bus. Then master should use the function I2C_Send7bitAddress() to send the second part 
-  *  of the 10-bit address (LSB) . Then master should wait for event 6. 
+*  of the 10-bit address (LSB) . Then master should wait for event 6. 
   *
   *     
   */

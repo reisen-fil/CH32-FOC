@@ -132,7 +132,7 @@ void ADC_CalcCurrent(MOTOR_CURRENT_PARAM_T *current_sample)
  * @param  encoder_pHandle Pointer to the encoder parameter structure.
  * @date 2026-06-02
  */
-static void FOC_Model_Callback(MC_FOC_SYSTEM_T *foc_phandle,ENCODER_PARAM_T *encoder_pHandle)
+static void FOC_Model_Callback(MC_FOC_SYSTEM_T *foc_phandle,ENCODER_PARAM_T *encoder_pHandle,PARAM_IDENTIFY_T *param_identify_pHandle)
 {
     MOTOR_CURRENT_PARAM_T *pSample = &foc_phandle->current_sample;
     FOC_STATE_MACHINE_T *pState = &foc_phandle->state_machine;
@@ -178,7 +178,7 @@ static void FOC_Model_Callback(MC_FOC_SYSTEM_T *foc_phandle,ENCODER_PARAM_T *enc
             if (pSample->MC_Ud_Volt >= _IQ(MC_Udc_UNDER_LIMIT)) {
                 /* Voltage normal, transition to startup state */
                 pState->startup_timer = 0;
-                pState->current_state = FOC_STATE_CALIB;
+                pState->current_state = FOC_STATE_CURRENT_CALIB;
             } 
             else{
                 /* DC bus under-voltage, enter fault state */
@@ -187,49 +187,60 @@ static void FOC_Model_Callback(MC_FOC_SYSTEM_T *foc_phandle,ENCODER_PARAM_T *enc
         }
         break;
 
-        case FOC_STATE_CALIB:        
+        case FOC_STATE_CURRENT_CALIB:
         {
             /* Calibration state: Op-amp offset acquisition and encoder calibration */
-            // Op-amp offset acquisition
+            // Op-amp offset acquisition            
             if(!pSample->adc_bias_ready) {                  
                 ADC_GetInitialOpAmpBias(pSample);
                 pSample->adc_bias_ready = 1;
             }
-            // Encoder calibration             
             else
             {
-                if(encoder_pHandle->isCalibrated == 1)            /* After successful calibration */
-                {
-                    pState->startup_timer++;
-                    if(pState->startup_timer >= 8000)     /* Stabilization time after calibration */
-                    {
-                        /* Calibration phase completed, transition to closed-loop operation */
-                        pState->startup_timer = 0;
-                        pState->current_state = FOC_STATE_STOP;   /* Enter stop state machine, waiting for control commands */
-
-                        GPIO_SetBits(GPIOC,GPIO_Pin_14);    /* Normal operation indicator LED */                    
-                    }
-                }
-                else EncoderAlign_Calibrate(encoder_pHandle,foc_phandle);       /* Currently calibrating */
+                pState->current_state = FOC_STATE_ENCODER_CALIB;
             }
-
         }
         break;
 
-        case FOC_STATE_STOP:
+        case FOC_STATE_ENCODER_CALIB:        
         {
-            /* Check startup conditions */
-            if (Target_Sp_test >= _IQ(0.05)) {  /* Startup request exists */
-                pState->current_state = FOC_STATE_CLOSED_LOOP;
+            // Encoder calibration             
+            if(encoder_pHandle->isCalibrated == 1)            /* After successful calibration */
+            {
+                pState->startup_timer++;
+                if(pState->startup_timer >= 8000)     /* Stabilization time after calibration */
+                {
+                    /* Calibration phase completed, transition to closed-loop operation */
+                    pState->startup_timer = 0;
+                    pState->current_state = FOC_STATE_STANDBY;   /* Enter stop state machine, waiting for control commands */
+                    pState->vofa_ctrlfoc_state = DEVICE_IDLE;
+
+                    GPIO_SetBits(GPIOC,GPIO_Pin_14);    /* Normal operation indicator LED */
+                    GPIO_ResetBits(GPIOC,GPIO_Pin_15);                    
+                }
             }
+            else EncoderAlign_Calibrate(encoder_pHandle,foc_phandle);       /* Currently calibrating */                 
+        }
+        break;
+
+        case FOC_STATE_STANDBY:
+        {          
+            if (Target_iq_test >= _IQ(0.05)) {  /* Startup request exists */
+                // pState->current_state = FOC_STATE_CLOSED_LOOP;
+            }
+        }
+        break;
+        
+        case FOC_STATE_PARAM_MEASURE:
+        {
+            PMSM_ParaIdentify_Function(param_identify_pHandle,foc_phandle);
+            // if(param_identify_pHandle->state == PARAM_FINISH) pState->current_state = FOC_STATE_STANDBY;
         }
         break;
         
         case FOC_STATE_CLOSED_LOOP:
         {    
-            ADC_CalcCurrent(pSample);       // Phase current calculation
-
-            EncoderAlign_UpdateAngle(encoder_pHandle);
+            EncoderAlign_UpdateAngle(encoder_pHandle,foc_phandle);
 
             if(I_Ctrl_cnt >= 5)         /* Speed loop execution part */
             {
@@ -246,45 +257,48 @@ static void FOC_Model_Callback(MC_FOC_SYSTEM_T *foc_phandle,ENCODER_PARAM_T *enc
             I_Ctrl_cnt++;            
             
             // pSample->Eletheta_current = EncoderAlign_GetElectricalAngle(encoder_pHandle);
+            if(foc_phandle->state_machine.current_state == FOC_STATE_CLOSED_LOOP)
+            {
+                pSample->Eletheta = EncoderAlign_GetElectricalAngle(encoder_pHandle);
+                pSample->theta = EncoderAlign_GetMechanicalAngle(encoder_pHandle);
+                // pSample->Now_Encoder = EncoderAlign_GetNowEncoder(encoder_pHandle);
 
-            pSample->Eletheta = EncoderAlign_GetElectricalAngle(encoder_pHandle);
-            pSample->theta = EncoderAlign_GetMechanicalAngle(encoder_pHandle);
-            // pSample->Now_Encoder = EncoderAlign_GetNowEncoder(encoder_pHandle);
-            
-            Clark_transfor(pSample);
-            Park_transfor(pSample);               
+                ADC_CalcCurrent(pSample);       // Phase current calculation            
+                
+                Clark_transfor(pSample);
+                Park_transfor(pSample);               
 
-            pIqCtrl->now = pSample->I_q;
-            pIdCtrl->now = pSample->I_d;
-            // pIdCtrl->now = MC_LPF1_Run(pIdLpf1Ctrl,pSample->I_d);
-            // pIqCtrl->now = MC_LPF1_Run(pIqLpf1Ctrl,pSample->I_q);            
+                pIqCtrl->now = pSample->I_q;
+                pIdCtrl->now = pSample->I_d;
+                // pIdCtrl->now = MC_LPF1_Run(pIdLpf1Ctrl,pSample->I_d);
+                // pIqCtrl->now = MC_LPF1_Run(pIqLpf1Ctrl,pSample->I_q);            
 
-            // PID calculation, target d-axis current is 0
-            MC_PI_Calculate(&foc_phandle->iq_control, pSpCtrl->out);  // Output limit 0.7 (modulation ratio)
-            MC_PI_Calculate(&foc_phandle->id_control, _IQ(0.0));
+                // PID calculation, target d-axis current is 0
+                MC_PI_Calculate(&foc_phandle->iq_control, pSpCtrl->out);  // Output limit 0.7 (modulation ratio)
+                MC_PI_Calculate(&foc_phandle->id_control, _IQ(0.0));
 
-            // Use PID outputs for FOC control
-            FOC_Ctrl(pIqCtrl->out,pIdCtrl->out,foc_phandle);            
-            
-            // FOC_CNT++;
+                // Use PID outputs for FOC control
+                FOC_Ctrl(pIqCtrl->out,pIdCtrl->out,foc_phandle);            
+                
+                // FOC_CNT++;
 
-            // if(FOC_CNT >= 2)
-            // {
-            //     FOC_CNT = 0;                 
-            // }            
+                // if(FOC_CNT >= 2)
+                // {
+                //     FOC_CNT = 0;                 
+                // }            
 
-            
-            // FOC_Ctrl_cnt = TIM2->CNT;
+                
+                // FOC_Ctrl_cnt = TIM2->CNT;
 
-            /* Stall detection */
-            if (pSample->I_q > _IQ(0.7)) {         
-                if (++pState->stall_detect_timer > 500) {
-                    pState->current_state = FOC_STATE_STALL_DETECT;
+                /* Stall detection */
+                if (pSample->I_q > _IQ(0.7)) {         
+                    if (++pState->stall_detect_timer > 500) {
+                        pState->current_state = FOC_STATE_STALL_DETECT;
+                    }
+                } else {
+                    pState->stall_detect_timer = 0;
                 }
-            } else {
-                pState->stall_detect_timer = 0;
             }
-        
         }
         break;
 
@@ -292,17 +306,44 @@ static void FOC_Model_Callback(MC_FOC_SYSTEM_T *foc_phandle,ENCODER_PARAM_T *enc
         case FOC_STATE_FAULT:
         {
             /* Fault state handling */
+            static uint8_t fault_ctrl_flag = 0;
             
-            // Stop voltage output            
-            FOC_Ctrl(_IQ(0.0),_IQ(0.0),foc_phandle);            
-            GPIO_SetBits(GPIOC,GPIO_Pin_15);      /* Turn on red LED to indicate error */
-            GPIO_ResetBits(GPIOC,GPIO_Pin_14);                 
+            // Execute shutdown control only once when entering the fault/stall state
+            if (fault_ctrl_flag == 0) {
+                FOC_Ctrl(_IQ(0.0), _IQ(0.0), foc_phandle);
+                GPIO_SetBits(GPIOC,GPIO_Pin_15);      /* Turn on red LED to indicate error */
+                GPIO_ResetBits(GPIOC,GPIO_Pin_14);                 
+                fault_ctrl_flag = 1;
+            }                           
             
             /* Fault recovery logic (optional delayed recovery) */
             if (pState->error_counter++ > 12000) {
                 /* Fault cleared, return to idle state */
                 pState->error_counter = 0;
+                fault_ctrl_flag = 0;
                 pState->current_state = FOC_STATE_IDLE;
+            }
+        }
+        break;
+
+        case FOC_STATE_STOP:            /* Completely stop motor operation, indicated by the red LED flashing */
+        {
+            static uint8_t stop_ctrl_flag = 0;
+            
+            // Execute shutdown control only once when entering the STOP state
+            if (stop_ctrl_flag == 0) {
+                FOC_Ctrl(_IQ(0.0), _IQ(0.0), foc_phandle);
+                stop_ctrl_flag = 1;
+            }      
+
+            static uint8_t Error_LED_Flag = 0;
+            if(pState->error_counter++ > 6000)
+            {
+                GPIO_WriteBit(GPIOC,GPIO_Pin_15,(BitAction)Error_LED_Flag);      /* Turn on red LED to indicate error */
+                GPIO_ResetBits(GPIOC,GPIO_Pin_14);
+                
+                pState->error_counter = 0;
+                Error_LED_Flag = ~Error_LED_Flag;                
             }
         }
         break;
@@ -320,7 +361,7 @@ void ADC1_2_IRQHandler(void) {
     // Check if ADC injected conversion complete interrupt occurred //ADC1->STATR & (ADC_IT_JEOC>>8)
     if (ADC_GetITStatus(ADC2, ADC_IT_JEOC) == SET) {
 
-            FOC_Model_Callback(&mc_foc_handle,&mc_encoder_handle);
+            FOC_Model_Callback(&mc_foc_handle,&mc_encoder_handle,&mc_pmsm_param_identify_handle);
       
         }
 

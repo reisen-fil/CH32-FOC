@@ -18,7 +18,8 @@
  */
 void MC_Param_Printf(void)
 {
-    uart_printf("I:%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%d,%d,%d\n",
+    uart_printf("I:%d,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%d,%d,%d\n",
+                    mc_encoder_handle.nowEncoder,
                     _IQtoF(mc_foc_handle.current_sample.Eletheta),        
                     _IQtoF(Target_iq_test),        
                     _IQtoF(mc_foc_handle.current_sample.I_q),
@@ -33,7 +34,10 @@ void MC_Param_Printf(void)
                     _IQtoF(mc_foc_handle.Sp_control.out),
                     _IQtoF(Target_Po_test),
                     _IQtoF(mc_foc_handle.Po_control.now),
-                    _IQtoF(mc_foc_handle.Po_control.out),                                         
+                    _IQtoF(mc_foc_handle.Po_control.out),
+                    _IQtoF(mc_pmsm_param_identify_handle.Rs),
+                    _IQtoF(mc_pmsm_param_identify_handle.Ld),
+                    _IQtoF(mc_pmsm_param_identify_handle.Lq),                                                             
                     TIM1->CH1CVR,
                     TIM1->CH2CVR,
                     TIM1->CH3CVR);        
@@ -202,12 +206,129 @@ void External_Function_Init(void)
     PotentiometerCtrl_Init(&mc_potentiometer_ctrl_handle);    
 }
 
+/**
+ * @brief Converts the numeric payload in a VOFA command packet to an IQ fixed-point value.
+ * @param Vofa_data_bag Pointer to the received VOFA data packet buffer.
+ * @return _iq Converted signed fixed-point value parsed from the packet payload.
+ * @date 2026-06-19
+ */
+_iq RxPacket_Data_Handle(uint8_t* Vofa_data_bag)
+{
+  _iq Data = _IQ(0.0);
+  _iq decimal_weight = _IQ(0.1);
+  uint8_t dot_Flag = 0;
+  int8_t minus_Flag = 1;
+
+  for(uint8_t i = 0; i < 10; i++)
+  {
+    uint8_t ch = Vofa_data_bag[i + 12];
+
+    if(ch == 0x2D)
+    {
+      minus_Flag = -1;
+      continue;
+    }
+
+    if(ch == 0x2E)
+    {
+      dot_Flag = 1;
+      continue;
+    }
+
+    if((ch < 0x30) || (ch > 0x39))
+    {
+      continue;
+    }
+
+    if(dot_Flag == 0)
+    {
+      Data = _IQmpy(Data, _IQ(10.0)) + _IQ((long)(ch - 0x30));
+    }
+    else
+    {
+      Data += _IQmpy(_IQ((long)(ch - 0x30)), decimal_weight);
+      decimal_weight = _IQmpy(decimal_weight, _IQ(0.1));
+    }
+  }
+
+  if(minus_Flag < 0)
+  {
+    Data = -Data;
+  }
+
+//   return _IQtoF(Data);
+  return Data;
+}
+
+/**
+ * @brief Parses current-control mode commands from the host and updates the target q-axis current.
+ * @param Buffer Pointer to the received command buffer.
+ * @date 2026-06-19
+ */
+void CtrlModeSet_Handle(uint8_t* Buffer)
+{
+    if(!strncmp((char*)Buffer,"Target_Po = ",12)) Target_Po_test = RxPacket_Data_Handle(Buffer);
+}
+
+/**
+ * @brief Processes VOFA host serial commands and updates the FOC state machine or parameter identification state.
+ * @param foc_phandle Pointer to the FOC system handle.
+ * @param PMSM_phandle Pointer to the PMSM parameter identification handle.
+ * @param rx_buffer Pointer to the received UART command buffer.
+ * @date 2026-06-19
+ */
+void UART_RX_Handle(MC_FOC_SYSTEM_T *foc_phandle,PARAM_IDENTIFY_T *PMSM_phandle,uint8_t *rx_buffer)
+{    
+    FOC_STATE_MACHINE_T *pFocState = &foc_phandle->state_machine; 
+
+    if(pFocState->current_state >= FOC_STATE_STANDBY)
+    {
+        switch(pFocState->vofa_ctrlfoc_state)       
+        {
+            case DEVICE_IDLE:
+                if(!strcmp((char*)rx_buffer,"POSITION_CTRL_MODE"))
+                {
+                    pFocState->vofa_ctrlfoc_state = FOC_POSITION_CTRL_MODE;                    
+                    pFocState->current_state = FOC_STATE_CLOSED_LOOP;       /* Current closed-loop control state setting */                    
+                }
+                else if(!strcmp((char*)rx_buffer,"PARAM_IDENTI_MODE"))
+                {
+                    pFocState->vofa_ctrlfoc_state = PARAM_IDENTIFY_MODE;
+
+                    pFocState->current_state = FOC_STATE_PARAM_MEASURE;
+                    PMSM_phandle->state = PARAM_IDLE;  
+                } 
+                break;                                     
+            case FOC_POSITION_CTRL_MODE:        
+                CtrlModeSet_Handle(rx_buffer);      /* Enter host current control mode */
+                if(!strcmp((char*)rx_buffer,"DEVICE_IDLE"))
+                {
+                    pFocState->vofa_ctrlfoc_state = DEVICE_IDLE;       /* Exit this control mode and return to the initial state */
+                    pFocState->current_state = FOC_STATE_STANDBY;       /* Current closed-loop control state setting */                             
+                }
+                break;
+            case PARAM_IDENTIFY_MODE:
+                if(!strcmp((char*)rx_buffer,"RS_IDENTIFY")) PMSM_phandle->state = PARAM_MEASURE_R_1;
+                else if(!strcmp((char*)rx_buffer,"LD_IDENTIFY")) PMSM_phandle->state = PARAM_MEASURE_Ld;
+                else if(!strcmp((char*)rx_buffer,"LQ_IDENTIFY")) PMSM_phandle->state = PARAM_MEASURE_Lq;
+                else if(!strcmp((char*)rx_buffer,"DEVICE_IDLE"))
+                {
+                    pFocState->vofa_ctrlfoc_state = DEVICE_IDLE;       /* Exit this control mode and return to the initial state */
+                    pFocState->current_state = FOC_STATE_STANDBY;       /* Current closed-loop control state setting */                    
+                }                                
+                break;
+            default:break;
+        }
+    }
+
+}
 
 /* Lightweight UART print implementation (without standard printf) */
 
 /**
  * @brief Flushes the UART transmit buffer by sending its contents via DMA.
  * @param usart_phandle Pointer to the USART DMA system handle.
+ * @date 2026-06-02
  */
 static void uart_flush(USART_DMA_SYSTEM_T *usart_phandle)
 {
@@ -221,6 +342,7 @@ static void uart_flush(USART_DMA_SYSTEM_T *usart_phandle)
  * @brief Appends a single character to the UART transmit buffer, flushing it automatically if full.
  * @param ch The character to append.
  * @param usart_phandle Pointer to the USART DMA system handle.
+ * @date 2026-06-02
  */
 static void uart_putchar(char ch, USART_DMA_SYSTEM_T *usart_phandle)
 {
@@ -235,6 +357,7 @@ static void uart_putchar(char ch, USART_DMA_SYSTEM_T *usart_phandle)
  * @param str Pointer to the string.
  * @param len Length of the string.
  * @param usart_phandle Pointer to the USART DMA system handle.
+ * @date 2026-06-02
  */
 static void uart_putstr(const char *str, int len, USART_DMA_SYSTEM_T *usart_phandle)
 {
@@ -250,6 +373,7 @@ static void uart_putstr(const char *str, int len, USART_DMA_SYSTEM_T *usart_phan
  * @param base The numerical base (e.g., 10, 16).
  * @param uppercase Use uppercase letters for hex (if base is 16).
  * @return int The length of the resulting string.
+ * @date 2026-06-02
  */
 static int itoa_custom(char *buf, int32_t val, uint8_t base, uint8_t uppercase)
 {
@@ -294,6 +418,7 @@ static int itoa_custom(char *buf, int32_t val, uint8_t base, uint8_t uppercase)
  * @param val The floating-point value to convert.
  * @param prec Number of decimal places (max 6).
  * @return int The length of the resulting string.
+ * @date 2026-06-02
  */
 static int ftoa_custom(char *buf, float val, uint8_t prec)
 {
@@ -331,6 +456,7 @@ static int ftoa_custom(char *buf, float val, uint8_t prec)
  * @param base The numerical base (e.g., 10, 16).
  * @param uppercase Use uppercase letters for hex (if base is 16).
  * @return int The length of the resulting string.
+ * @date 2026-06-02
  */
 static int utoa_custom(char *buf, uint32_t val, uint8_t base, uint8_t uppercase)
 {
@@ -362,6 +488,7 @@ static int utoa_custom(char *buf, uint32_t val, uint8_t base, uint8_t uppercase)
  * @param args The variable argument list.
  * @param usart_phandle Pointer to the USART DMA system handle.
  * @return int The total number of characters printed.
+ * @date 2026-06-02
  */
 static int uart_vprintf_impl(const char *fmt, va_list args, USART_DMA_SYSTEM_T *usart_phandle)
 {
@@ -534,6 +661,7 @@ static int uart_vprintf_impl(const char *fmt, va_list args, USART_DMA_SYSTEM_T *
  * @param fmt The format string.
  * @param ... Variable arguments.
  * @return int The total number of characters printed.
+ * @date 2026-06-02
  */
 int uart_printf(const char *fmt, ...)
 {
@@ -547,52 +675,3 @@ int uart_printf(const char *fmt, ...)
     return count;
 }
 
-/**
- * @brief Parses a null-terminated string representing a decimal number and converts it to a floating-point value.
- * @param str The input string to parse.
- * @return float The converted floating-point value, or 0.0f if the input is NULL.
- */
-float string_to_float(char *str) {
-    if (str == NULL) {
-        return 0.0f; /* Error handling, return 0 */
-    }
-
-    float result = 0.0f;
-    int sign = 1; /* Sign: 1 for positive, -1 for negative */
-    int i = 0;
-
-    /* Skip leading whitespace */
-    while (isspace(str[i])) {
-        i++;
-    }
-
-    /* Check sign */
-    if (str[i] == '-') {
-        sign = -1;
-        i++;
-    } else if (str[i] == '+') {
-        i++;
-    }
-
-    /* Parse integer part */
-    while (isdigit(str[i])) {
-        result = result * 10.0f + (str[i] - '0');
-        i++;
-    }
-
-    /* Check decimal point */
-    if (str[i] == '.') {
-        i++;
-        float decimal_place = 0.1f;
-        while (isdigit(str[i])) {
-            result += (str[i] - '0') * decimal_place;
-            decimal_place *= 0.1f;
-            i++;
-        }
-    }
-
-    /* Apply sign */
-    result *= sign;
-
-    return result;
-}

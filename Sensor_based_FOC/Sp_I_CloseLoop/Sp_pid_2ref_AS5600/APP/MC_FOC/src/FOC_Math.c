@@ -319,7 +319,7 @@ void MC_LPF1_Init(MC_LPF1_T *handle, _iq Ts, _iq Fc)
  * @param handle Pointer to the LPF1 handle structure.
  * @param input  Current input value.
  * @return _iq   Filtered output value.
- * @date 2026-06-02
+ * @date 2026-06-19
  */
 _iq MC_LPF1_Run(MC_LPF1_T *handle, _iq input)
 {
@@ -491,7 +491,7 @@ void rfft(complex *v, int n, complex *tmp)
 _iq GetFreqMagnitude(complex *fft_result, int target_freq)
 {   
     /* 1. Calculate FFT index for the target frequency (rounded) */
-    int index = (int)(_IQtoF(_IQ(target_freq/FFT_FREQ_RES)) + 0.5f);
+    int index = (int)(_IQtoF(_IQ(target_freq/FFT_FREQ_RES)) + 2.0f);
     
     /* 2. Calculate magnitude: |X(k)| = sqrt(Re^2 + Im^2) / N * 2 (for real signals) */
     _iq Mag = _IQmpy(_IQdiv(_IQsqrt(_IQmpy(fft_result[index].Re, fft_result[index].Re) + _IQmpy(fft_result[index].Im, fft_result[index].Im)), _IQ(FFT_N)), _IQ(2.0));
@@ -518,3 +518,4 @@ void Asm_Mag(complex *x, int n)
         uart_printf("Bin %d: %.3f Hz, Magnitude: %.3f \n", i, _IQtoF(_IQmpy(_IQ(i), _IQ(FFT_FREQ_RES))), _IQtoF(Mag));
     }
 }
+

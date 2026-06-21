@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file sys_init.c
  * @brief System-level initialization for the motor control firmware, including peripheral clock configuration, interrupt priority grouping, and module initialization sequencing.
  * @author reisen_fil (reisen_oxj@qq.com)
@@ -14,7 +14,8 @@
 /* Hardware System Initialization */
 
 /**
- * @brief Configures the system clocks and enables the peripheral clocks for GPIO, Timers, ADC, I2C, USART, and DMA.
+ * @brief Configures the system clocks and enables the peripheral clocks for GPIO, Timers, ADC, I2C, USART and DMA.
+ * @date 2026-06-02
  */
 static void Drv_System_Init(void)
 {
@@ -36,6 +37,7 @@ static void Drv_System_Init(void)
 
 /**
  * @brief Initializes the Programmable Fast Interrupt Controller (PFIC) / NVIC and configures the interrupt priority grouping for nested interrupts.
+ * @date 2026-06-02
  */
 static void Drv_PFIC_Init(void)
 {
@@ -44,6 +46,7 @@ static void Drv_PFIC_Init(void)
 
 /**
  * @brief Orchestrates the initialization sequence for all low-level hardware drivers, starting with system clocks and NVIC, followed by specific peripheral drivers.
+ * @date 2026-06-02
  */
 static void My_DRV_Init(void)
 {    
@@ -58,6 +61,7 @@ static void My_DRV_Init(void)
 
 /**
  * @brief Initializes the motor control hardware drivers and external user-interface peripherals (e.g., LEDs, potentiometers, keys).
+ * @date 2026-06-02
  */
 static void MC_Module_Init(void)
 {
@@ -67,6 +71,7 @@ static void MC_Module_Init(void)
 
 /**
  * @brief Top-level system initialization function that initializes all hardware/peripheral modules and sets up the FOC state machine and motor control parameters.
+ * @date 2026-06-02
  */
 void MC_Sys_Init(void)
 {
