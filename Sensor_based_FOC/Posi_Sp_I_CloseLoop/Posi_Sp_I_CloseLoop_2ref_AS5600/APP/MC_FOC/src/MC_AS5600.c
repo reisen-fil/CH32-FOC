@@ -11,6 +11,12 @@
 
 #include "MC_AS5600.h"
 
+/**
+ * @brief Resolves the circular wrap-around of the encoder delta to calculate the true shortest positional difference.
+ * @param delta The raw difference between two consecutive encoder readings.
+ * @return The resolved delta value, adjusted for the encoder's circular resolution (ENCODER_RESOLUTION).
+ * @date 2026-06-19
+ */
 static int16_t EncoderAlign_ResolveDelta(int16_t delta)
 {
     const int16_t halfResolution = ENCODER_RESOLUTION / 2;

@@ -216,7 +216,7 @@ void External_Function_Init(void)
  * @return _iq Converted signed fixed-point value parsed from the packet payload.
  * @date 2026-06-19
  */
-_iq RxPacket_Data_Handle(uint8_t* Vofa_data_bag)
+_iq RxPacket_Data_Handle(uint8_t* Vofa_data_bag,uint8_t Format_Offset)
 {
   _iq Data = _IQ(0.0);
   _iq decimal_weight = _IQ(0.1);
@@ -225,7 +225,7 @@ _iq RxPacket_Data_Handle(uint8_t* Vofa_data_bag)
 
   for(uint8_t i = 0; i < 10; i++)
   {
-    uint8_t ch = Vofa_data_bag[i + 12];
+    uint8_t ch = Vofa_data_bag[i + Format_Offset];
 
     if(ch == 0x2D)
     {
@@ -265,66 +265,103 @@ _iq RxPacket_Data_Handle(uint8_t* Vofa_data_bag)
 }
 
 /**
- * @brief Parses current-control mode commands from the host and updates the target q-axis current.
- * @param Buffer Pointer to the received command buffer.
- * @date 2026-06-19
+ * @brief Parses the received string buffer to extract and set the target speed based on the configured communication mode.
+ * @param Buffer Pointer to the received null-terminated string buffer containing the command and data.
+ * @date 2026-06-24
  */
 void CtrlModeSet_Handle(uint8_t* Buffer)
 {
-    if(!strncmp((char*)Buffer,"Target_Iq = ",12)) Target_iq_test = RxPacket_Data_Handle(Buffer);
+    #if(MC_CM_Select == 1)
+    {
+        if(!strncmp((char*)Buffer,"Target_Iq = ",12)) Target_iq_test = RxPacket_Data_Handle(Buffer,12);
+    }
+    #elif(MC_CM_Select == 2)
+    {
+        if(!strncmp((char*)Buffer,"Iq=",3)) Target_iq_test = RxPacket_Data_Handle(Buffer,3);
+    }
+    #endif
 }
 
 /**
- * @brief Processes VOFA host serial commands and updates the FOC state machine or parameter identification state.
- * @param foc_phandle Pointer to the FOC system handle.
- * @param PMSM_phandle Pointer to the PMSM parameter identification handle.
- * @param rx_buffer Pointer to the received UART command buffer.
- * @date 2026-06-19
+ * @brief Processes incoming control commands from UART or CAN to update the FOC state machine and parameter identification states.
+ * @param foc_phandle Pointer to the FOC system handle structure.
+ * @param PMSM_phandle Pointer to the PMSM parameter identification handle structure.
+ * @param uart_rx_buffer Pointer to the UART receive buffer structure (active when MC_CM_Select == 1).
+ * @param can_rx_buffer Pointer to the CAN receive data buffer (active when MC_CM_Select == 2).
+ * @note The active communication interface (UART or CAN) is determined by the MC_CM_Select compilation macro.
+ * @date 2026-06-24
  */
-void UART_RX_Handle(MC_FOC_SYSTEM_T *foc_phandle,PARAM_IDENTIFY_T *PMSM_phandle,uint8_t *rx_buffer)
+void MC_CTRL_RX_Handle(MC_FOC_SYSTEM_T *foc_phandle,PARAM_IDENTIFY_T *PMSM_phandle,USART_RX_READ_T *uart_rx_buffer,uint8_t *can_rx_buffer)
 {    
     FOC_STATE_MACHINE_T *pFocState = &foc_phandle->state_machine; 
 
     if(pFocState->current_state >= FOC_STATE_STANDBY)
     {
-        switch(pFocState->vofa_ctrlfoc_state)       
-        {
-            case DEVICE_IDLE:
-                if(!strcmp((char*)rx_buffer,"CURRENT_CTRL_MODE"))
-                {
-                    pFocState->vofa_ctrlfoc_state = FOC_CURRENT_CTRL_MODE;                    
-                    pFocState->current_state = FOC_STATE_CLOSED_LOOP;       /* Current closed-loop control state setting */                    
-                }
-                else if(!strcmp((char*)rx_buffer,"PARAM_IDENTI_MODE"))
-                {
-                    pFocState->vofa_ctrlfoc_state = PARAM_IDENTIFY_MODE;
+        #if(MC_CM_Select == 1)
+        {        
+            switch(pFocState->vofa_ctrlfoc_state)       
+            {
+                case DEVICE_IDLE:
+                    if(!strcmp((char*)uart_rx_buffer->rxbuf,"CURRENT_CTRL_MODE"))
+                    {
+                        pFocState->vofa_ctrlfoc_state = FOC_CURRENT_CTRL_MODE;                    
+                        pFocState->current_state = FOC_STATE_CLOSED_LOOP;       /* Speed closed-loop control state setting */                    
+                    }
+                    else if(!strcmp((char*)uart_rx_buffer->rxbuf,"PARAM_IDENTI_MODE"))
+                    {
+                        pFocState->vofa_ctrlfoc_state = PARAM_IDENTIFY_MODE;
 
-                    pFocState->current_state = FOC_STATE_PARAM_MEASURE;
-                    PMSM_phandle->state = PARAM_IDLE;  
-                } 
-                break;                                     
-            case FOC_CURRENT_CTRL_MODE:        
-                CtrlModeSet_Handle(rx_buffer);      /* Enter host current control mode */
-                if(!strcmp((char*)rx_buffer,"DEVICE_IDLE"))
-                {
-                    pFocState->vofa_ctrlfoc_state = DEVICE_IDLE;       /* Exit this control mode and return to the initial state */
-                    pFocState->current_state = FOC_STATE_STANDBY;       /* Current closed-loop control state setting */                             
-                }
-                break;
-            case PARAM_IDENTIFY_MODE:
-                if(!strcmp((char*)rx_buffer,"RS_IDENTIFY")) PMSM_phandle->state = PARAM_MEASURE_R_1;
-                else if(!strcmp((char*)rx_buffer,"LD_IDENTIFY")) PMSM_phandle->state = PARAM_MEASURE_Ld;
-                else if(!strcmp((char*)rx_buffer,"LQ_IDENTIFY")) PMSM_phandle->state = PARAM_MEASURE_Lq;
-                else if(!strcmp((char*)rx_buffer,"DEVICE_IDLE"))
-                {
-                    pFocState->vofa_ctrlfoc_state = DEVICE_IDLE;       /* Exit this control mode and return to the initial state */
-                    pFocState->current_state = FOC_STATE_STANDBY;       /* Current closed-loop control state setting */                    
-                }                                
-                break;
-            default:break;
+                        pFocState->current_state = FOC_STATE_PARAM_MEASURE;
+                        PMSM_phandle->state = PARAM_IDLE;  
+                    } 
+                    break;                                     
+                case FOC_CURRENT_CTRL_MODE:        
+                    CtrlModeSet_Handle(uart_rx_buffer->rxbuf);      /* Enter host Current control mode */
+                    if(!strcmp((char*)uart_rx_buffer->rxbuf,"DEVICE_IDLE"))
+                    {
+                        pFocState->vofa_ctrlfoc_state = DEVICE_IDLE;       /* Exit this control mode and return to the initial state */
+                        pFocState->current_state = FOC_STATE_STANDBY;       /* Current closed-loop control state setting */                             
+                    }
+                    break;
+                case PARAM_IDENTIFY_MODE:
+                    if(!strcmp((char*)uart_rx_buffer->rxbuf,"RS_IDENTIFY")) PMSM_phandle->state = PARAM_MEASURE_R_1;
+                    else if(!strcmp((char*)uart_rx_buffer->rxbuf,"LD_IDENTIFY")) PMSM_phandle->state = PARAM_MEASURE_Ld;
+                    else if(!strcmp((char*)uart_rx_buffer->rxbuf,"LQ_IDENTIFY")) PMSM_phandle->state = PARAM_MEASURE_Lq;
+                    else if(!strcmp((char*)uart_rx_buffer->rxbuf,"DEVICE_IDLE"))
+                    {
+                        pFocState->vofa_ctrlfoc_state = DEVICE_IDLE;       /* Exit this control mode and return to the initial state */
+                        pFocState->current_state = FOC_STATE_STANDBY;       /* Current closed-loop control state setting */                    
+                    }                                
+                    break;
+                default:break;
+            }
+            memset(uart_rx_buffer->rxbuf,0,uart_rx_buffer->rxlen);
         }
+        #elif(MC_CM_Select == 2)
+        {
+            switch(pFocState->vofa_ctrlfoc_state)       
+            {                
+                case DEVICE_IDLE:
+                    if(!strcmp((char*)can_rx_buffer,"IQ_CTRL"))
+                    {
+                        pFocState->vofa_ctrlfoc_state = FOC_CURRENT_CTRL_MODE;                    
+                        pFocState->current_state = FOC_STATE_CLOSED_LOOP;       /* Current closed-loop control state setting */                    
+                    } 
+                    break;                                     
+                case FOC_CURRENT_CTRL_MODE:        
+                    CtrlModeSet_Handle(can_rx_buffer);      /* Enter host current control mode */
+                    if(!strcmp((char*)can_rx_buffer,"RETURN"))
+                    {
+                        pFocState->vofa_ctrlfoc_state = DEVICE_IDLE;       /* Exit this control mode and return to the initial state */
+                        pFocState->current_state = FOC_STATE_STANDBY;       /* Current closed-loop control state setting */                             
+                    }
+                    break;
+                default:break;                
+            }
+            mc_can_handle.rx_finish_flag = 0;             
+        }
+        #endif
     }
-
 }
 
 /* Lightweight UART print implementation (without standard printf) */

@@ -44,3 +44,7 @@ POTENTIOMETER_CTRL_T mc_potentiometer_ctrl_handle;
 
 /* USART DMA communication system handle */
 USART_DMA_SYSTEM_T mc_usart_dma_handle;
+
+/* CAN communication system handle */
+CAN_SYSTEM_T mc_can_handle;
+

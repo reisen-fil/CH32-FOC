@@ -251,6 +251,7 @@ void Drv_I2C_Init(void)
 #else
     /**
      * @brief Generates the I2C START condition by pulling SDA low while SCL is high.
+     * @date 2026-06-19
      */
     static void drv_SoftI2C_Start(void)
     {
@@ -267,6 +268,7 @@ void Drv_I2C_Init(void)
 
     /**
      * @brief Generates the I2C STOP condition by pulling SDA high while SCL is high.
+     * @date 2026-06-19
      */
     static void drv_SoftI2C_Stop(void)
     {
@@ -284,6 +286,7 @@ void Drv_I2C_Init(void)
      * @brief Waits for the ACK (acknowledge) signal from the I2C slave after sending a byte.
      * @retval 0 ACK received normally.
      * @retval 1 No ACK received (timeout).
+     * @date 2026-06-19
      */
     static uint8_t drv_SoftI2C_WaitAck(void)
     {
@@ -311,6 +314,7 @@ void Drv_I2C_Init(void)
     /**
      * @brief Generates an ACK (acknowledge) or NACK (not acknowledge) signal after receiving a byte.
      * @param ack 0 to send ACK, 1 to send NACK.
+     * @date 2026-06-19
      */
     static void drv_SoftI2C_SendAck(uint8_t ack)
     {
@@ -332,6 +336,7 @@ void Drv_I2C_Init(void)
     /**
      * @brief Transmits a single byte (8 bits) over the software I2C bus, MSB first.
      * @param txd The byte data to be transmitted.
+     * @date 2026-06-19
      */
     static void drv_SoftI2C_SendByte(uint8_t txd)
     {
@@ -358,6 +363,7 @@ void Drv_I2C_Init(void)
      * @brief Receives a single byte (8 bits) from the software I2C bus and sends an ACK or NACK.
      * @param ack 0 to send ACK after reading, 1 to send NACK.
      * @return The received byte.
+     * @date 2026-06-19
      */
     static uint8_t drv_SoftI2C_ReadByte(uint8_t ack)
     {
@@ -378,7 +384,7 @@ void Drv_I2C_Init(void)
         drv_SoftI2C_SendAck(ack);
 
         return receive;
-    }    
+    } 
 
 #endif
 
@@ -391,6 +397,7 @@ void Drv_I2C_Init(void)
  * @param data    The byte data to be written.
  * @retval 0 Success.
  * @retval non-0 Failure (timeout or NACK at various stages).
+ * @date 2026-06-19
  */
 // uint8_t drv_I2C_WriteOneByte(uint8_t devAddr, uint8_t regAddr, uint8_t data)
 // {

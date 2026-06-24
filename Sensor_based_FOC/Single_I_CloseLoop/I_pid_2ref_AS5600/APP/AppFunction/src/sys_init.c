@@ -26,8 +26,13 @@ static void Drv_System_Init(void)
     #ifdef I2C_Hardware
         RCC_APB1PeriphClockCmd(RCC_APB1Periph_I2C1, ENABLE);
     #endif    
-  
+    
     RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART3, ENABLE);
+        
+    #if(MC_CM_Select == 2) 
+        RCC_APB1PeriphClockCmd(RCC_APB1Periph_CAN1, ENABLE);
+    #endif
+
     RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA1, ENABLE);
     RCC_ADCCLKConfig(RCC_PCLK2_Div8);    /* ADC clock: 18MHz */
 
@@ -54,8 +59,12 @@ static void My_DRV_Init(void)
     Drv_PFIC_Init();
 
     Drv_I2C_Init();
-    Drv_TIM_Init();    
-    Drv_USART_Init();       
+    Drv_TIM_Init(); 
+    Drv_USART_Init();
+    #if(MC_CM_Select == 2) 
+        Drv_CAN_Init();
+    #endif       
+           
     Drv_ADC_Init();         
 }
 

@@ -15,16 +15,13 @@ void USART3_IRQHandler(void) __attribute__((interrupt("WCH-Interrupt-fast")));
 static void usart3_cb_init(USART_CIRCULAR_BUFFER_T *cb);
 static void usart3_cb_put_frame(USART_CIRCULAR_BUFFER_T *cb, uint16_t start_offset, uint16_t length);
 
-/*********************************************************************
- * @fn      drv_USART_DMA_init
- *
+/**
  * @brief   Configures the USART peripheral, associated DMA channels for TX/RX, GPIO pins, and NVIC for IDLE line interrupt handling.
  *
  * @param   USART - Pointer to the USART peripheral base address.
  * @param   baudrate - USART communication baud rate.
  * @param   usart_phandle - Pointer to the USART DMA system handle.
  *
- * @return  None
  * @date 2026-06-19
  */
 static void drv_USART_DMA_init(USART_TypeDef *USART, uint32_t baudrate, USART_DMA_SYSTEM_T *usart_phandle)
@@ -81,19 +78,24 @@ static void drv_USART_DMA_init(USART_TypeDef *USART, uint32_t baudrate, USART_DM
     USART_Init(USART, &USART_InitStructure);
 
     /* Configure NVIC for USART3 interrupt */
-    NVIC_InitStructure.NVIC_IRQChannel = USART3_IRQn;
-    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 1;
-    NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
-    NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
-    NVIC_Init(&NVIC_InitStructure);    
 
-    USART_ITConfig(USART, USART_IT_IDLE, ENABLE);      /* Enable USART IDLE line interrupt for frame detection */
+    #if(MC_CM_Select == 1)
+    {
+        NVIC_InitStructure.NVIC_IRQChannel = USART3_IRQn;
+        NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 1;
+        NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
+        NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+        NVIC_Init(&NVIC_InitStructure);    
+
+        USART_ITConfig(USART, USART_IT_IDLE, ENABLE);      /* Enable USART IDLE line interrupt for frame detection */
+
+        /* Initialize the circular buffer and reset DMA cursor */
+        usart3_cb_init(&usart_phandle->RX_Circular_Buffer);
+        usart_phandle->dma_rx_old_pos = 0; 
+    }
+    #endif
 
     USART_Cmd(USART, ENABLE);
-
-    /* Initialize the circular buffer and reset DMA cursor */
-    usart3_cb_init(&usart_phandle->RX_Circular_Buffer);
-    usart_phandle->dma_rx_old_pos = 0; 
 
     /* Enable USART DMA requests for RX and TX */
     USART_DMACmd(USART, USART_DMAReq_Rx, ENABLE);

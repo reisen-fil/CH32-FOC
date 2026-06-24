@@ -323,6 +323,8 @@ extern POTENTIOMETER_CTRL_T mc_potentiometer_ctrl_handle;
 
 /********************************* USART+DMA_Serial *************************************/
 
+#define MC_CM_Select        1                   /* Motor Control Mode Select -> 1:USART  2:CAN */
+
 /* Lightweight UART print buffer sizes */
 #define PRINTF_BUF_SIZE 256                     /* Temporary formatting buffer size for uart_printf */
 #define UART_OUT_BUF_SIZE 512                   /* UART transmit output buffer size */
@@ -365,5 +367,12 @@ typedef struct {
 } USART_DMA_SYSTEM_T;        		
 
 extern USART_DMA_SYSTEM_T mc_usart_dma_handle;
+
+typedef struct {
+    CanRxMsg rx_message;
+    uint8_t rx_finish_flag;
+} CAN_SYSTEM_T; 
+
+extern CAN_SYSTEM_T mc_can_handle;
 
 #endif

@@ -28,5 +28,6 @@
 #include "drv_tim.h"
 #include "drv_uart.h"
 #include "drv_i2c.h"
+#include "drv_can.h"
 
 #endif

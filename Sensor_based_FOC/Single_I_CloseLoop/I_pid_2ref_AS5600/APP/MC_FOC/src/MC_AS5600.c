@@ -11,7 +11,6 @@
 
 #include "MC_AS5600.h"
 
-
 /**
   * @brief  Read the raw 12-bit mechanical angle from the AS5600 sensor through I2C
   * @param  encoder_pHandle: Pointer to the encoder parameter structure used to store the read result
@@ -38,7 +37,6 @@ uint8_t AS5600_GetAngle(ENCODER_PARAM_T *encoder_pHandle)
 
     return i2c_status; // Return the I2C read status for upper-layer judgment
 }
-
 
 /* Parameter initialization */
 
